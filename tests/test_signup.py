@@ -1,5 +1,3 @@
-"""API regression tests for the email-only signup operation (AAA)."""
-
 import re
 
 import pytest
@@ -7,8 +5,6 @@ import requests
 from jsonschema import validate
 
 TIMEOUT = 15
-# Based on responses actually observed from the target API on 2026-10-27.
-# The OpenAPI document specifies only HTTP 200, not failure statuses.
 REJECTION_STATUS = 409
 TYPE_ERROR_MESSAGE = (
     r"could\s+not\s+be\s+converted\s+to\s+System\.String"
@@ -25,7 +21,6 @@ def _signup(session: requests.Session, url: str, payload: dict):
 
 
 def _assert_registered(response, contract):
-    """Validate the documented 200 *string*, not an invented JSON object."""
     assert response.status_code == contract.success_status, (
         f"Expected HTTP {contract.success_status}, "
         f"got HTTP {response.status_code}: {response.text[:300]!r}"
@@ -112,36 +107,26 @@ def _assert_rejected(
 
 
 class TestAuthSignup:
-    """Independent positive and negative tests for the actual endpoint."""
 
     def test_successful_registration(
         self, api_session, signup_url, signup_contract, new_signup
     ):
-        # Arrange
         payload = new_signup()
-        # Act
         response = _signup(api_session, signup_url, payload)
-        # Assert
         _assert_registered(response, signup_contract)
 
     def test_registration_with_optional_fields(
         self, api_session, signup_url, signup_contract, new_signup
     ):
-        # Arrange: lang and utm are optional strings in the Swagger schema.
         payload = new_signup(optional=True)
-        # Act
         response = _signup(api_session, signup_url, payload)
-        # Assert
         _assert_registered(response, signup_contract)
 
     def test_empty_json_object_is_rejected(
         self, api_session, signup_url
     ):
-        # Arrange
         payload = {}
-        # Act
         response = _signup(api_session, signup_url, payload)
-        # Assert
         _assert_rejected(
             response,
             code="user.email.notNull",
@@ -150,13 +135,10 @@ class TestAuthSignup:
         )
 
     def test_missing_body_is_rejected(self, api_session, signup_url):
-        # Arrange: explicit JSON media type avoids a misleading HTTP 415.
         headers = {"Content-Type": "application/json"}
-        # Act: no `json=` or `data=` -> zero request-body bytes.
         response = api_session.post(
             signup_url, headers=headers, timeout=TIMEOUT
         )
-        # Assert
         _assert_rejected(
             response,
             code="validation.failed",
@@ -164,11 +146,8 @@ class TestAuthSignup:
         )
 
     def test_missing_email_is_rejected(self, api_session, signup_url):
-        # Arrange: optional lang is present, required email is not.
         payload = {"lang": "en"}
-        # Act
         response = _signup(api_session, signup_url, payload)
-        # Assert
         _assert_rejected(
             response,
             code="user.email.notNull",
@@ -184,11 +163,8 @@ class TestAuthSignup:
     def test_invalid_email_is_rejected(
         self, email, api_session, signup_url
     ):
-        # Arrange
         payload = {"email": email}
-        # Act
         response = _signup(api_session, signup_url, payload)
-        # Assert
         if email.strip():
             expected_code = "user.email.isInvalid"
             reason = r"invalid\s+email\s+format"
@@ -210,11 +186,8 @@ class TestAuthSignup:
     def test_email_with_invalid_type_is_rejected(
         self, email, api_session, signup_url
     ):
-        # Arrange
         payload = {"email": email}
-        # Act
         response = _signup(api_session, signup_url, payload)
-        # Assert
         _assert_rejected(
             response,
             code="validation.failed",
@@ -230,12 +203,9 @@ class TestAuthSignup:
     def test_optional_field_with_invalid_type_is_rejected(
         self, field, value, api_session, signup_url, new_signup
     ):
-        # Arrange
         payload = new_signup()
         payload[field] = value
-        # Act
         response = _signup(api_session, signup_url, payload)
-        # Assert
         _assert_rejected(
             response,
             code="validation.failed",
